@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Analysis Web App</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        body { padding-top: 20px; background-color: #f8f9fa; }
+        .card { margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .insight-card { border-left: 4px solid #0d6efd; }
+        .insight-priority-high { border-left-color: #dc3545; }
+        .insight-priority-medium { border-left-color: #ffc107; }
+        .insight-priority-low { border-left-color: #6c757d; }
+        .preview-table { font-size: 0.9rem; overflow-x: auto; }
+        .loading { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 9999; }
+    </style>
+</head>
+<body>
+<div class="container-fluid">
+    <h1 class="text-center mb-4">📊 Data Analysis Web Application</h1>
+    
+    <!-- Upload Section -->
+    <div class="card">
+        <div class="card-header bg-primary text-white">1. Upload CSV File</div>
+        <div class="card-body">
+            <form id="uploadForm" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <input type="file" class="form-control" id="csvFile" accept=".csv" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Upload & Preview</button>
+            </form>
+            <div id="uploadStatus" class="mt-3"></div>
+            <div id="previewArea" style="display:none;">
+                <h5>Preview (first 5 rows)</h5>
+                <div class="preview-table" id="previewTable"></div>
+                <p><strong>Shape:</strong> <span id="dataShape"></span></p>
+                <p><strong>Columns:</strong> <span id="dataColumns"></span></p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Cleaning Controls -->
+    <div class="card">
+        <div class="card-header bg-success text-white">2. Data Cleaning</div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="removeDuplicates">
+                        <label class="form-check-label">Remove duplicates</label>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="handleMissing" checked>
+                        <label class="form-check-label">Handle missing values</label>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <select id="numMissingStrategy" class="form-select">
+                        <option value="mean">Fill numeric with mean</option>
+                        <option value="median">Fill numeric with median</option>
+                        <option value="drop">Drop rows with missing numeric</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select id="catMissingStrategy" class="form-select">
+                        <option value="mode">Fill categorical with mode</option>
+                        <option value="drop">Drop rows with missing categorical</option>
+                    </select>
+                </div>
+            </div>
+            <div class="mt-3">
+                <button id="applyCleaningBtn" class="btn btn-success">Apply Cleaning</button>
+                <button id="resetCleaningBtn" class="btn btn-secondary">Reset to Original</button>
+            </div>
+            <div id="cleaningResult" class="mt-3"></div>
+        </div>
+    </div>
+    
+    <!-- Tabs for Analysis -->
+    <ul class="nav nav-tabs" id="analysisTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="stats-tab" data-bs-toggle="tab" data-bs-target="#stats" type="button" role="tab">Statistics</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="insights-tab" data-bs-toggle="tab" data-bs-target="#insights" type="button" role="tab">Insights</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="viz-tab" data-bs-toggle="tab" data-bs-target="#viz" type="button" role="tab">Visualizations</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="corr-tab" data-bs-toggle="tab" data-bs-target="#corr" type="button" role="tab">Correlation</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="export-tab" data-bs-toggle="tab" data-bs-target="#export" type="button" role="tab">Export</button>
+        </li>
+    </ul>
+    <div class="tab-content mt-3" id="analysisTabContent">
+        <!-- Statistics Tab -->
+        <div class="tab-pane fade show active" id="stats" role="tabpanel">
+            <div id="statsContent">Click "Refresh Statistics" to load.</div>
+            <button id="refreshStatsBtn" class="btn btn-primary mt-2">Refresh Statistics</button>
+        </div>
+        
+        <!-- Insights Tab -->
+        <div class="tab-pane fade" id="insights" role="tabpanel">
+            <div id="insightsContent"></div>
+            <button id="refreshInsightsBtn" class="btn btn-info mt-2">Generate Insights</button>
+        </div>
+        
+        <!-- Visualizations Tab -->
+        <div class="tab-pane fade" id="viz" role="tabpanel">
+            <div class="row">
+                <div class="col-md-4">
+                    <label>Chart Type</label>
+                    <select id="chartType" class="form-select">
+                        <option value="histogram">Histogram</option>
+                        <option value="bar">Bar Chart</option>
+                        <option value="scatter">Scatter Plot</option>
+                        <option value="correlation_heatmap">Correlation Heatmap</option>
+                    </select>
+                </div>
+                <div class="col-md-4" id="xColDiv">
+                    <label>X Column</label>
+                    <select id="xColumn" class="form-select"></select>
+                </div>
+                <div class="col-md-4" id="yColDiv" style="display:none;">
+                    <label>Y Column</label>
+                    <select id="yColumn" class="form-select"></select>
+                </div>
+            </div>
+            <button id="generateChartBtn" class="btn btn-primary mt-2">Generate Chart</button>
+            <div id="chartContainer" class="mt-3"></div>
+        </div>
+        
+        <!-- Correlation Tab -->
+        <div class="tab-pane fade" id="corr" role="tabpanel">
+            <button id="loadCorrelationBtn" class="btn btn-primary">Load Correlation Matrix</button>
+            <div id="correlationContainer" class="mt-3"></div>
+        </div>
+        
+        <!-- Export Tab -->
+        <div class="tab-pane fade" id="export" role="tabpanel">
+            <div class="d-grid gap-2">
+                <a href="/api/export/csv" class="btn btn-success">Download Cleaned CSV</a>
+                <a href="/api/export/json" class="btn btn-info">Export Statistics as JSON</a>
+                <button id="clearSessionBtn" class="btn btn-danger">Clear Session (Start Over)</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="loading" id="loadingSpinner">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    // Helper to show/hide loading
+    function showLoading() { document.getElementById('loadingSpinner').style.display = 'block'; }
+    function hideLoading() { document.getElementById('loadingSpinner').style.display = 'none'; }
+    
+    // Update column dropdowns for visualization
+    function updateColumnSelectors(columns) {
+        const xSelect = document.getElementById('xColumn');
+        const ySelect = document.getElementById('yColumn');
+        xSelect.innerHTML = '';
+        ySelect.innerHTML = '';
+        columns.forEach(col => {
+            let optX = document.createElement('option');
+            optX.value = col;
+            optX.textContent = col;
+            xSelect.appendChild(optX);
+            let optY = document.createElement('option');
+            optY.value = col;
+            optY.textContent = col;
+            ySelect.appendChild(optY);
+        });
+    }
+    
+    // Upload file
+    document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        showLoading();
+        const file = document.getElementById('csvFile').files[0];
+        const formData = new FormData();
+        formData.append('file', file);
+        try {
+            const response = await fetch('/api/upload', { method: 'POST', body: formData });
+            const data = await response.json();
+            if (response.ok) {
+                // Display preview
+                let html = '<table class="table table-bordered table-striped"><thead><tr>';
+                Object.keys(data.preview[0]).forEach(col => html += `<th>${col}</th>`);
+                html += '</tr></thead><tbody>';
+                data.preview.forEach(row => {
+                    html += '<tr>';
+                    Object.values(row).forEach(val => html += `<td>${val}</td>`);
+                    html += '</tr>';
+                });
+                html += '</tbody></table>';
+                document.getElementById('previewTable').innerHTML = html;
+                document.getElementById('dataShape').innerText = `${data.shape[0]} rows, ${data.shape[1]} columns`;
+                document.getElementById('dataColumns').innerText = data.columns.join(', ');
+                document.getElementById('previewArea').style.display = 'block';
+                updateColumnSelectors(data.columns);
+                document.getElementById('uploadStatus').innerHTML = `<div class="alert alert-success">${data.message}</div>`;
+            } else {
+                document.getElementById('uploadStatus').innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+            }
+        } catch (err) {
+            document.getElementById('uploadStatus').innerHTML = `<div class="alert alert-danger">Upload failed: ${err.message}</div>`;
+        }
+        hideLoading();
+    });
+    
+    // Apply cleaning
+    document.getElementById('applyCleaningBtn').addEventListener('click', async () => {
+        showLoading();
+        const params = {
+            remove_duplicates: document.getElementById('removeDuplicates').checked,
+            handle_missing: document.getElementById('handleMissing').checked,
+            missing_numeric_strategy: document.getElementById('numMissingStrategy').value,
+            missing_categorical_strategy: document.getElementById('catMissingStrategy').value,
+            trim_whitespace: true
+        };
+        try {
+            const response = await fetch('/api/clean', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params) });
+            const data = await response.json();
+            if (response.ok) {
+                let msg = `<div class="alert alert-success">${data.message}<br>Shape: ${data.shape_before[0]}x${data.shape_before[1]} → ${data.shape_after[0]}x${data.shape_after[1]}<br>Duplicates removed: ${data.duplicates_removed}</div>`;
+                document.getElementById('cleaningResult').innerHTML = msg;
+                // Refresh preview area? Optionally update shape display
+                document.getElementById('dataShape').innerText = `${data.shape_after[0]} rows, ${data.shape_after[1]} columns`;
+            } else {
+                document.getElementById('cleaningResult').innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+            }
+        } catch (err) {
+            document.getElementById('cleaningResult').innerHTML = `<div class="alert alert-danger">Clean failed: ${err.message}</div>`;
+        }
+        hideLoading();
+    });
+    
+    // Reset cleaning (reload original)
+    document.getElementById('resetCleaningBtn').addEventListener('click', async () => {
+        showLoading();
+        try {
+            const response = await fetch('/api/clean', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) }); // empty params -> no cleaning
+            const data = await response.json();
+            if (response.ok) {
+                document.getElementById('cleaningResult').innerHTML = `<div class="alert alert-info">Reset to original data.</div>`;
+                document.getElementById('dataShape').innerText = `${data.shape_after[0]} rows, ${data.shape_after[1]} columns`;
+            } else {
+                document.getElementById('cleaningResult').innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+            }
+        } catch (err) { console.error(err); }
+        hideLoading();
+    });
+    
+    // Refresh statistics
+    document.getElementById('refreshStatsBtn').addEventListener('click', async () => {
+        showLoading();
+        const resp = await fetch('/api/statistics');
+        const stats = await resp.json();
+        if (resp.ok) {
+            let html = '<h5>Overview</h5><ul>';
+            html += `<li>Rows: ${stats.overview.rows}</li><li>Columns: ${stats.overview.columns}</li>`;
+            html += `<li>Missing values: ${stats.overview.missing_total}</li><li>Duplicates: ${stats.overview.duplicates}</li></ul>`;
+            if (Object.keys(stats.numeric).length > 0) {
+                html += '<h5>Numeric Columns Summary</h5><div class="table-responsive"><table class="table table-sm table-bordered">';
+                // Build a nice table: columns as rows
+                let firstCol = Object.keys(stats.numeric)[0];
+                let statsNames = Object.keys(stats.numeric[firstCol]);
+                html += '<thead><tr><th>Statistic</th>';
+                Object.keys(stats.numeric).forEach(col => html += `<th>${col}</th>`);
+                html += '</tr></thead><tbody>';
+                statsNames.forEach(stat => {
+                    html += `<tr><td>${stat}</td>`;
+                    Object.keys(stats.numeric).forEach(col => {
+                        let val = stats.numeric[col][stat];
+                        html += `<td>${typeof val === 'number' ? val.toFixed(2) : val}</td>`;
+                    });
+                    html += '</tr>';
+                });
+                html += '</tbody></table></div>';
+            }
+            if (Object.keys(stats.categorical).length > 0) {
+                html += '<h5>Categorical Frequencies (Top 5)</h5>';
+                for (let [col, freq] of Object.entries(stats.categorical)) {
+                    html += `<strong>${col}</strong><ul>`;
+                    Object.entries(freq).slice(0,5).forEach(([val, cnt]) => html += `<li>${val}: ${cnt}</li>`);
+                    html += '</ul>';
+                }
+            }
+            document.getElementById('statsContent').innerHTML = html;
+        } else {
+            document.getElementById('statsContent').innerHTML = `<div class="alert alert-danger">${stats.error}</div>`;
+        }
+        hideLoading();
+    });
+    
+    // Insights
+    document.getElementById('refreshInsightsBtn').addEventListener('click', async () => {
+        showLoading();
+        const resp = await fetch('/api/insights');
+        const insights = await resp.json();
+        if (resp.ok) {
+            let html = '';
+            insights.forEach(ins => {
+                let priorityClass = 'insight-card';
+                if (ins.priority === 'high') priorityClass += ' insight-priority-high';
+                else if (ins.priority === 'medium') priorityClass += ' insight-priority-medium';
+                else priorityClass += ' insight-priority-low';
+                html += `<div class="card mb-2 ${priorityClass}"><div class="card-body"><h6>${ins.title}</h6><p>${ins.description}</p><span class="badge bg-secondary">${ins.category}</span> <span class="badge bg-${ins.priority === 'high' ? 'danger' : (ins.priority === 'medium' ? 'warning' : 'secondary')}">${ins.priority}</span></div></div>`;
+            });
+            document.getElementById('insightsContent').innerHTML = html || '<p>No automatic insights generated. Try different data.</p>';
+        } else {
+            document.getElementById('insightsContent').innerHTML = `<div class="alert alert-danger">${insights.error}</div>`;
+        }
+        hideLoading();
+    });
+    
+    // Dynamic chart controls
+    document.getElementById('chartType').addEventListener('change', function() {
+        const type = this.value;
+        const yDiv = document.getElementById('yColDiv');
+        if (type === 'scatter') yDiv.style.display = 'block';
+        else yDiv.style.display = 'none';
+    });
+    
+    document.getElementById('generateChartBtn').addEventListener('click', async () => {
+        showLoading();
+        const chartType = document.getElementById('chartType').value;
+        const x = document.getElementById('xColumn').value;
+        const y = document.getElementById('yColumn').value;
+        const payload = { type: chartType, x: x };
+        if (chartType === 'scatter') payload.y = y;
+        const resp = await fetch('/api/visualize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const data = await resp.json();
+        if (resp.ok) {
+            Plotly.newPlot('chartContainer', data.graph.data, data.graph.layout);
+        } else {
+            document.getElementById('chartContainer').innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+        }
+        hideLoading();
+    });
+    
+    // Correlation heatmap
+    document.getElementById('loadCorrelationBtn').addEventListener('click', async () => {
+        showLoading();
+        const resp = await fetch('/api/correlation');
+        const data = await resp.json();
+        if (resp.ok && data.columns && data.columns.length > 0) {
+            const payload = { type: 'correlation_heatmap' };
+            const vizResp = await fetch('/api/visualize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const vizData = await vizResp.json();
+            if (vizResp.ok) {
+                Plotly.newPlot('correlationContainer', vizData.graph.data, vizData.graph.layout);
+            } else {
+                document.getElementById('correlationContainer').innerHTML = `<div class="alert alert-danger">${vizData.error}</div>`;
+            }
+        } else {
+            document.getElementById('correlationContainer').innerHTML = `<div class="alert alert-danger">${data.error || 'Need at least 2 numeric columns'}</div>`;
+        }
+        hideLoading();
+    });
+    
+    // Clear session
+    document.getElementById('clearSessionBtn').addEventListener('click', async () => {
+        await fetch('/api/session', { method: 'DELETE' });
+        location.reload();
+    });
+</script>
+</body>
+</html>

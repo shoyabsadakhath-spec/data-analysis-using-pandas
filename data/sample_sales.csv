@@ -1,0 +1,11 @@
+Date,Product,Region,Sales,Quantity
+2024-01-01,Widget A,North,1250,50
+2024-01-02,Widget B,South,980,32
+2024-01-03,Widget A,East,2100,84
+2024-01-04,Widget C,West,450,18
+2024-01-05,Widget B,North,3200,128
+2024-01-06,Widget A,South,1870,75
+2024-01-07,Widget C,East,930,37
+2024-01-08,Widget B,West,540,22
+2024-01-09,Widget A,North,2760,110
+2024-01-10,Widget C,South,1120,45
