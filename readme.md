@@ -13,7 +13,12 @@ A complete tool to upload CSV files, clean data, generate statistics, insights, 
 
 ## Installation
 
-1. Create a virtual environment:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate   # On Windows: venv\Scripts\activate
+git clone https://github.com/yourusername/data-analysis-using-pandas
+cd project folder
+then run in cmd 
+pip install -r requirements.txt 
+enter 
+then run python app.py 
+you can see a local web host server link come 
+http://127.0.0.1:5000
+use ctrl+enter the web application run in your browser automatically 
